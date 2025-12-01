@@ -164,10 +164,10 @@ class SemanticLidar(Sensor):
         point_cloud_msg = create_cloud(header, fields, lidar_data.tolist())
         self.semantic_lidar_publisher.publish(point_cloud_msg)
 
-class FMCWLidar(Sensor):
+class DopplerLidar(Sensor):
 
     """
-    Actor implementation details for FMCW lidars
+    Actor implementation details for Doppler lidars
     """
 
     def __init__(self, uid, name, parent, relative_spawn_pose, node, carla_actor, synchronous_mode):
@@ -189,7 +189,7 @@ class FMCWLidar(Sensor):
         :param synchronous_mode: use in synchronous mode?
         :type synchronous_mode: bool
         """
-        super(FMCWLidar, self).__init__(uid=uid,
+        super(DopplerLidar, self).__init__(uid=uid,
                                         name=name,
                                         parent=parent,
                                         relative_spawn_pose=relative_spawn_pose,
@@ -197,32 +197,32 @@ class FMCWLidar(Sensor):
                                         carla_actor=carla_actor,
                                         synchronous_mode=synchronous_mode)
 
-        self.fmcw_lidar_publisher = node.new_publisher(
+        self.doppler_lidar_publisher = node.new_publisher(
             PointCloud2,
             self.get_topic_prefix(),
             qos_profile=10)
         self.listen()
 
     def destroy(self):
-        super(FMCWLidar, self).destroy()
-        self.node.destroy_publisher(self.fmcw_lidar_publisher)
+        super(DopplerLidar, self).destroy()
+        self.node.destroy_publisher(self.doppler_lidar_publisher)
 
     # pylint: disable=arguments-differ
     def sensor_data_updated(self, carla_lidar_measurement):
         """
-        Function to transform a received FMCW lidar measurement into a ROS point cloud message
+        Function to transform a received Doppler lidar measurement into a ROS point cloud message
 
-        FMCW (Frequency-Modulated Continuous-Wave) lidars provide additional information
+        Doppler lidars provide additional information
         compared to standard lidars, including velocity measurements and enhanced
         object detection capabilities.
 
-        :param carla_lidar_measurement: carla FMCW lidar measurement object
-        :type carla_lidar_measurement: carla.FMCWLidarMeasurement
+        :param carla_lidar_measurement: carla Doppler lidar measurement object
+        :type carla_lidar_measurement: carla.DopplerLidarMeasurement
         """
         header = self.get_msg_header(timestamp=carla_lidar_measurement.timestamp)
 
-        # Define the data structure for FMCW lidar raw data
-        # This matches the structure provided by Carla's FMCW lidar sensor
+        # Define the data structure for Doppler lidar raw data
+        # This matches the structure provided by Carla's Doppler lidar sensor
         raw_dtype = numpy.dtype([
             ('azimuth',    numpy.float32),    # Horizontal angle in degrees
             ('elevation',  numpy.float32),    # Vertical angle in degrees
@@ -238,7 +238,7 @@ class FMCWLidar(Sensor):
             ('dynamic',    numpy.uint8)       # Dynamic object flag
         ], align=False)
 
-        # Parse raw data from the FMCW lidar measurement
+        # Parse raw data from the Doppler lidar measurement
         raw_data = numpy.frombuffer(carla_lidar_measurement.raw_data,
                                     dtype=raw_dtype)
 
@@ -272,7 +272,7 @@ class FMCWLidar(Sensor):
         y = range_data * numpy.sin(elevation_rad) * numpy.sin(azimuth_rad)
         z = -range_data * numpy.cos(elevation_rad)
 
-        # Define point cloud fields including FMCW-specific data
+        # Define point cloud fields including Doppler-specific data
         fields = [
             PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
             PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
@@ -294,4 +294,4 @@ class FMCWLidar(Sensor):
 
         # Create and publish the point cloud message
         point_cloud_msg = create_cloud(header, fields, point_cloud_data.tolist())
-        self.fmcw_lidar_publisher.publish(point_cloud_msg)
+        self.doppler_lidar_publisher.publish(point_cloud_msg)
