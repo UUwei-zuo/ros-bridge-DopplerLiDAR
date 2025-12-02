@@ -1,4 +1,4 @@
-# ROS/ROS2 bridge for CARLA simulator with Doppler LiDAR support
+# ROS bridge for CARLA simulator with Doppler LiDAR support
 
 [![GitHub license](https://img.shields.io/github/license/UUwei-zuo/ros-bridge-DopplerLiDAR)](https://github.com/UUwei-zuo/ros-bridge-DopplerLiDAR/blob/master/LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/UUwei-zuo/ros-bridge-DopplerLiDAR)](https://github.com/UUwei-zuo/ros-bridge-DopplerLiDAR)
