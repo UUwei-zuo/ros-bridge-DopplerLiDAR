@@ -199,7 +199,7 @@ class DopplerLidar(Sensor):
 
         self.doppler_lidar_publisher = node.new_publisher(
             PointCloud2,
-            self.get_topic_prefix(),
+            self.get_topic_prefix() + "/point_cloud",
             qos_profile=10)
         self.listen()
 

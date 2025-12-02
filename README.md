@@ -1,23 +1,68 @@
-# ROS/ROS2 bridge for CARLA simulator
+# ROS/ROS2 bridge for CARLA simulator with Doppler LiDAR support
 
-[![Actions Status](https://github.com/carla-simulator/ros-bridge/workflows/CI/badge.svg)](https://github.com/carla-simulator/ros-bridge)
-[![Documentation](https://readthedocs.org/projects/carla/badge/?version=latest)](http://carla.readthedocs.io)
-[![GitHub](https://img.shields.io/github/license/carla-simulator/ros-bridge)](https://github.com/carla-simulator/ros-bridge/blob/master/LICENSE)
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/carla-simulator/ros-bridge)](https://github.com/carla-simulator/ros-bridge/releases/latest)
+[![GitHub license](https://img.shields.io/github/license/UUwei-zuo/ros-bridge-DopplerLiDAR)](https://github.com/UUwei-zuo/ros-bridge-DopplerLiDAR/blob/master/LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/UUwei-zuo/ros-bridge-DopplerLiDAR)](https://github.com/UUwei-zuo/ros-bridge-DopplerLiDAR)
+[![GitHub forks](https://img.shields.io/github/forks/UUwei-zuo/ros-bridge-DopplerLiDAR)](https://github.com/UUwei-zuo/ros-bridge-DopplerLiDAR)
 
- This ROS package is a bridge that enables two-way communication between ROS and CARLA. The information from the CARLA server is translated to ROS topics. In the same way, the messages sent between nodes in ROS get translated to commands to be applied in CARLA.
+[ROS bridge](https://github.com/carla-simulator/ros-bridge?tab=readme-ov-file) enables two-way communication between [ROS](https://wiki.ros.org/ROS/Installation) and [CARLA](https://github.com/carla-simulator/carla).
+**This fork includes the enhanced Doppler LiDAR support, which provides Doppler velocity measurements.**
 
-![rviz setup](./docs/images/ad_demo.png "AD Demo")
+### Doppler LiDAR Features
+- **🚀️The 4th Measuring dimension**: Doppler LiDAR directly captures point dynamics by Doppler velocity besides traditional ranging measurements. 
+This is based on the [Doppler Effect](https://en.wikipedia.org/wiki/Doppler_effect).
+- **☁️Enhanced Point Cloud**: Doppler velocity is now included for each point before sent to ROS topic, facilitating advanced environmental perception for a broad range of applications.
 
-**This version requires CARLA 0.9.13**
+|                             ![DopplerLiDARscan](./dopplerlidarscan.png)                              | 
+|:----------------------------------------------------------------------------------------------------:| 
+| *An example of using Doppler LiDAR for motion planning: [DPNet](https://github.com/UUwei-zuo/DPNet)* |
 
-## Features
 
-- Provide Sensor Data (Lidar, Semantic lidar, Cameras (depth, segmentation, rgb, dvs), GNSS, Radar, IMU)
-- Provide Object Data (Transforms (via [tf](http://wiki.ros.org/tf)), Traffic light status, Visualization markers, Collision, Lane invasion)
-- Control AD Agents (Steer/Throttle/Brake)
-- Control CARLA (Play/pause simulation, Set simulation parameters)
+❗️*This bridge requires CARLA simulator with Doppler LiDAR plugin, provided by [CARLA-AEVA](https://github.com/aevainc/carla-aeva). Make sure to use it instead of the standard [CARLA](https://github.com/carla-simulator/carla) for Doppler LiDAR functionality.* 
 
-## Getting started and documentation
+## Quick Start (ROS1 Noetic on Ubuntu 20.04)
 
-Installation instructions and further documentation of the ROS bridge and additional packages are found [__here__](https://carla.readthedocs.io/projects/ros-bridge/en/latest/).
+### Prerequisites
+- Ubuntu 20.04
+- [CARLA-AEVA](https://github.com/aevainc/carla-aeva)
+- [ROS Noetic](https://wiki.ros.org/ROS/Installation) installed and configured
+
+### Installation & Setup
+
+```bash
+# 1. Create catkin workspace
+mkdir -p ~/carla-ros-bridge/catkin_ws/src
+cd ~/carla-ros-bridge
+
+# 2. Clone this repository with Doppler LiDAR support
+git clone --recurse-submodules https://github.com/UUwei-zuo/ros-bridge-DopplerLiDAR.git catkin_ws/src/ros-bridge
+
+# 3. Set up ROS environment
+source /opt/ros/noetic/setup.bash 
+
+# 4. Install ROS dependencies
+cd catkin_ws
+rosdep update
+rosdep install --from-paths src --ignore-src -r
+
+# 5. Build the ROS bridge
+catkin build
+
+# 6. Source the workspace
+source devel/setup.bash
+```
+
+Next, follow the [official documentation](https://carla.readthedocs.io/projects/ros-bridge/en/latest/ros_installation_ros1/) to run CARLA and launch the ROS bridge.
+
+### Using Doppler LiDAR
+
+The Doppler LiDAR sensor provides velocity measurements in addition to standard LiDAR data:
+
+- **Topic**: `/carla/ego_vehicle/doppler_lidar/point_cloud`
+- **Fields**: x, y, z, azimuth, elevation, range, intensity, velocity, valid
+- **Velocity**: Radial velocity in m/s using Doppler effect
+- **Type ID**: `sensor.lidar.doppler`
+
+*Notes:* 
+
+*This fork is currently developed and tested on ROS1 Noetic. ROS2 support may be available in future updates. Issues and contributions are welcome (contact: [zuowei@eee.hku.hk](mailto:zuowei@eee.hku.hk))*
+

@@ -388,7 +388,7 @@ class ActorFactory(object):
                 if carla_actor.type_id.endswith("sensor.lidar.ray_cast"):
                     actor = Lidar(uid, name, parent, spawn_pose, self.node,
                                   carla_actor, self.sync_mode)
-                elif carla_actor.type_id.startswith("sensor.lidar.fmcw"):
+                elif carla_actor.type_id.startswith("sensor.lidar.doppler"):
                     actor = DopplerLidar(uid, name, parent, spawn_pose, self.node,
                                        carla_actor, self.sync_mode)     
                 elif carla_actor.type_id.endswith(
