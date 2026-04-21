@@ -202,7 +202,13 @@ class ActorFactory(object):
             blueprint = secure_random.choice(
                 self.blueprint_lib.filter(req.type))
         else:
-            blueprint = self.blueprint_lib.find(req.type)
+            if req.type == "sensor.lidar.doppler":
+                fmcw_blueprints = self.blueprint_lib.filter("sensor.lidar.fmcw")
+                if not fmcw_blueprints:
+                    raise IndexError("CARLA blueprint 'sensor.lidar.fmcw' not found.")
+                blueprint = fmcw_blueprints[0]
+            else:
+                blueprint = self.blueprint_lib.find(req.type)
         blueprint.set_attribute('role_name', req.id)
         for attribute in req.attributes:
             blueprint.set_attribute(attribute.key, attribute.value)
