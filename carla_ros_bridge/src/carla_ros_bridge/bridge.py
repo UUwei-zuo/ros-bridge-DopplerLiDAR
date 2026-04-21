@@ -12,7 +12,8 @@ Class that handle communication between CARLA and ROS
 """
 
 import os
-import pkg_resources
+# import pkg_resources
+from importlib.metadata import version as get_version
 try:
     import queue
 except ImportError:
@@ -21,8 +22,14 @@ import sys
 from distutils.version import LooseVersion
 from threading import Thread, Lock, Event
 
-import carla
+import sys
 
+sys.path.append(
+    'PythonAPI/dist/carla-0.9.15-py%d.%d-linux-x86_64.egg' % (sys.version_info.major,
+                                                             sys.version_info.minor))
+import carla
+print("[bridge debug] CARLA module path:", carla.__file__)
+print("[bridge debug] CARLA client version:", carla.Client("localhost", 2000).get_client_version())
 import ros_compatibility as roscomp
 from ros_compatibility.node import CompatibleNode
 
@@ -61,6 +68,9 @@ class CarlaRosBridge(CompatibleNode):
         :type params: dict
         """
         super(CarlaRosBridge, self).__init__("ros_bridge_node")
+
+        # Initialize shutdown event
+        self.shutdown = Event()
 
     # pylint: disable=attribute-defined-outside-init
     def initialize_bridge(self, carla_world, params):
@@ -347,24 +357,33 @@ class CarlaRosBridge(CompatibleNode):
         """
         self.loginfo("Shutting down...")
         self.shutdown.set()
-        if not self.sync_mode:
-            if self.on_tick_id:
-                self.carla_world.remove_on_tick(self.on_tick_id)
-            self.actor_factory.thread.join()
-        else:
-            self.synchronous_mode_update_thread.join()
+        if hasattr(self, 'sync_mode'):
+            if not self.sync_mode:
+                if hasattr(self, 'on_tick_id'):
+                    self.carla_world.remove_on_tick(self.on_tick_id)
+                if hasattr(self, 'actor_factory') and hasattr(self.actor_factory, 'thread'):
+                    self.actor_factory.thread.join()
+            elif hasattr(self, 'synchronous_mode_update_thread'):
+                self.synchronous_mode_update_thread.join()
         self.loginfo("Object update finished.")
-        self.debug_helper.destroy()
-        self.status_publisher.destroy()
-        self.destroy_service(self.spawn_object_service)
-        self.destroy_service(self.destroy_object_service)
-        self.destroy_subscription(self.carla_weather_subscriber)
-        self.carla_control_queue.put(CarlaControl.STEP_ONCE)
+        if hasattr(self, 'debug_helper'):
+            self.debug_helper.destroy()
+        if hasattr(self, 'status_publisher'):
+            self.status_publisher.destroy()
+        if hasattr(self, 'spawn_object_service'):
+            self.destroy_service(self.spawn_object_service)
+        if hasattr(self, 'destroy_object_service'):
+            self.destroy_service(self.destroy_object_service)
+        if hasattr(self, 'carla_weather_subscriber'):
+            self.destroy_subscription(self.carla_weather_subscriber)
+        if hasattr(self, 'carla_control_queue'):
+            self.carla_control_queue.put(CarlaControl.STEP_ONCE)
 
-        for uid in self._registered_actors:
-            self.actor_factory.destroy_actor(uid)
-        self.actor_factory.update_available_objects()
-        self.actor_factory.clear()
+        if hasattr(self, '_registered_actors') and hasattr(self, 'actor_factory'):
+            for uid in self._registered_actors:
+                self.actor_factory.destroy_actor(uid)
+            self.actor_factory.update_available_objects()
+            self.actor_factory.clear()
         super(CarlaRosBridge, self).destroy()
 
 
@@ -398,8 +417,7 @@ def main(args=None):
                                                                0.05)
     parameters['register_all_sensors'] = carla_bridge.get_param('register_all_sensors', True)
     parameters['town'] = carla_bridge.get_param('town', 'Town01')
-    role_name = carla_bridge.get_param('ego_vehicle_role_name',
-                                       ["hero", "ego_vehicle", "hero1", "hero2", "hero3"])
+    role_name = carla_bridge.get_param('ego_vehicle_role_name', ["hero", "ego_vehicle", "hero1", "hero2", "hero3"])
     parameters["ego_vehicle"] = {"role_name": role_name}
 
     carla_bridge.loginfo("Trying to connect to {host}:{port}".format(
@@ -412,33 +430,42 @@ def main(args=None):
         carla_client.set_timeout(parameters['timeout'])
 
         # check carla version
-        dist = pkg_resources.get_distribution("carla")
-        if LooseVersion(dist.version) != LooseVersion(CarlaRosBridge.CARLA_VERSION):
+        # dist = pkg_resources.get_distribution("carla")
+        carla_version = get_version("carla")
+        if LooseVersion(carla_version) != LooseVersion(CarlaRosBridge.CARLA_VERSION):
             carla_bridge.logfatal("CARLA python module version {} required. Found: {}".format(
-                CarlaRosBridge.CARLA_VERSION, dist.version))
+                CarlaRosBridge.CARLA_VERSION, carla_version))
             sys.exit(1)
 
-        if LooseVersion(carla_client.get_server_version()) != \
-           LooseVersion(carla_client.get_client_version()):
-            carla_bridge.logwarn(
-                "Version mismatch detected: You are trying to connect to a simulator that might be incompatible with this API. Client API version: {}. Simulator API version: {}"
-                .format(carla_client.get_client_version(),
-                        carla_client.get_server_version()))
+        # if LooseVersion(carla_client.get_server_version()) != \
+        #    LooseVersion(carla_client.get_client_version()):
+        #     carla_bridge.logwarn(
+        #         "Version mismatch detected: You are trying to connect to a simulator that might be incompatible with this API. Client API version: {}. Simulator API version: {}"
+        #         .format(carla_client.get_client_version(),
+        #                 carla_client.get_server_version()))
 
         carla_world = carla_client.get_world()
 
         if "town" in parameters and not parameters['passive']:
-            if parameters["town"].endswith(".xodr"):
-                carla_bridge.loginfo(
-                    "Loading opendrive world from file '{}'".format(parameters["town"]))
-                with open(parameters["town"]) as od_file:
-                    data = od_file.read()
-                carla_world = carla_client.generate_opendrive_world(str(data))
+            # Check for environment variable to skip town loading
+            import os
+            skip_town_loading = os.environ.get('CARLA_SKIP_TOWN_LOADING', 'False').lower() == 'true'
+
+            if skip_town_loading:
+                carla_bridge.loginfo("CARLA_SKIP_TOWN_LOADING is set, keeping current world: '{}'".format(
+                    carla_world.get_map().name))
             else:
-                if carla_world.get_map().name != parameters["town"]:
-                    carla_bridge.loginfo("Loading town '{}' (previous: '{}').".format(
-                        parameters["town"], carla_world.get_map().name))
-                    carla_world = carla_client.load_world(parameters["town"])
+                if parameters["town"].endswith(".xodr"):
+                    carla_bridge.loginfo(
+                        "Loading opendrive world from file '{}'".format(parameters["town"]))
+                    with open(parameters["town"]) as od_file:
+                        data = od_file.read()
+                    carla_world = carla_client.generate_opendrive_world(str(data))
+                else:
+                    if carla_world.get_map().name != parameters["town"]:
+                        carla_bridge.loginfo("Loading town '{}' (previous: '{}').".format(
+                            parameters["town"], carla_world.get_map().name))
+                        carla_world = carla_client.load_world(parameters["town"])
             carla_world.tick()
 
         carla_bridge.initialize_bridge(carla_client.get_world(), parameters)
