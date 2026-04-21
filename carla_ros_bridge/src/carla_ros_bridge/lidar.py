@@ -86,7 +86,6 @@ class Lidar(Sensor):
         point_cloud_msg = create_cloud(header, fields, lidar_data)
         self.lidar_publisher.publish(point_cloud_msg)
 
-
 class SemanticLidar(Sensor):
 
     """
@@ -165,7 +164,6 @@ class SemanticLidar(Sensor):
         self.semantic_lidar_publisher.publish(point_cloud_msg)
 
 class DopplerLidar(Sensor):
-
     """
     Actor implementation details for Doppler lidars
     """
@@ -199,22 +197,26 @@ class DopplerLidar(Sensor):
 
         self.doppler_lidar_publisher = node.new_publisher(
             PointCloud2,
-            self.get_topic_prefix() + "/point_cloud",
+            self.get_topic_prefix(),
             qos_profile=10)
+        self.doppler_lidar_viz_publisher = node.new_publisher(
+            PointCloud2,
+            "{}/viz".format(self.get_topic_prefix()),
+            qos_profile=10)
+        # Optional CARLA sensor attributes for RViz-friendly Doppler visualization output.
+        self.viz_velocity_threshold = float(carla_actor.attributes.get('viz_velocity_threshold', 0.1))
+        self.viz_max_velocity = float(carla_actor.attributes.get('viz_max_velocity', 10.0))
+        self.viz_max_points = int(carla_actor.attributes.get('viz_max_points', 5000))
         self.listen()
 
     def destroy(self):
         super(DopplerLidar, self).destroy()
         self.node.destroy_publisher(self.doppler_lidar_publisher)
+        self.node.destroy_publisher(self.doppler_lidar_viz_publisher)
 
-    # pylint: disable=arguments-differ
     def sensor_data_updated(self, carla_lidar_measurement):
         """
         Function to transform a received Doppler lidar measurement into a ROS point cloud message
-
-        Doppler lidars provide additional information
-        compared to standard lidars, including velocity measurements and enhanced
-        object detection capabilities.
 
         :param carla_lidar_measurement: carla Doppler lidar measurement object
         :type carla_lidar_measurement: carla.DopplerLidarMeasurement
@@ -224,18 +226,18 @@ class DopplerLidar(Sensor):
         # Define the data structure for Doppler lidar raw data
         # This matches the structure provided by Carla's Doppler lidar sensor
         raw_dtype = numpy.dtype([
-            ('azimuth',    numpy.float32),    # Horizontal angle in degrees
-            ('elevation',  numpy.float32),    # Vertical angle in degrees
-            ('range',      numpy.float32),    # Distance in meters
-            ('intensity',  numpy.float32),    # Reflection intensity
-            ('velocity',   numpy.float32),    # Radial velocity in m/s
-            ('cos_angle',  numpy.float32),    # Cosine of incident angle
-            ('object_idx', numpy.uint32),     # Object index for segmentation
-            ('object_tag', numpy.uint32),     # Object tag/class
-            ('point_idx',  numpy.uint32),     # Point index within the measurement
-            ('beam_idx',   numpy.uint8),      # Beam index
-            ('valid',      numpy.uint8),      # Validity flag
-            ('dynamic',    numpy.uint8)       # Dynamic object flag
+            ('azimuth', numpy.float32),  # Horizontal angle in degrees
+            ('elevation', numpy.float32),  # Vertical angle in degrees
+            ('range', numpy.float32),  # Distance in meters
+            ('intensity', numpy.float32),  # Reflection intensity
+            ('velocity', numpy.float32),  # Radial velocity in m/s
+            ('cos_angle', numpy.float32),  # Cosine of incident angle
+            ('object_idx', numpy.uint32),  # Object index for segmentation
+            ('object_tag', numpy.uint32),  # Object tag/class
+            ('point_idx', numpy.uint32),  # Point index within the measurement
+            ('beam_idx', numpy.uint8),  # Beam index
+            ('valid', numpy.uint8),  # Validity flag
+            ('dynamic', numpy.uint8)  # Dynamic object flag
         ], align=False)
 
         # Parse raw data from the Doppler lidar measurement
@@ -295,3 +297,45 @@ class DopplerLidar(Sensor):
         # Create and publish the point cloud message
         point_cloud_msg = create_cloud(header, fields, point_cloud_data.tolist())
         self.doppler_lidar_publisher.publish(point_cloud_msg)
+
+        # Publish an RViz-optimized cloud with packed RGB color from signed radial velocity.
+        # Keep near-static points and color them gray for context.
+        x_v = x
+        y_v = y
+        z_v = z
+        v_v = velocity
+
+        if self.viz_max_points > 0 and len(v_v) > self.viz_max_points:
+            step = int(numpy.ceil(float(len(v_v)) / float(self.viz_max_points)))
+            x_v = x_v[::step]
+            y_v = y_v[::step]
+            z_v = z_v[::step]
+            v_v = v_v[::step]
+
+        velocity_norm = numpy.clip(numpy.abs(v_v) / max(self.viz_max_velocity, 1e-6), 0.0, 1.0)
+        moving_mask = numpy.abs(v_v) >= self.viz_velocity_threshold
+
+        red = numpy.where(v_v > 0.0, (255.0 * velocity_norm).astype(numpy.uint8), 0)
+        green = numpy.zeros_like(red, dtype=numpy.uint8)
+        blue = numpy.where(v_v < 0.0, (255.0 * velocity_norm).astype(numpy.uint8), 0)
+
+        # Static / near-static points: gray.
+        gray_r = numpy.uint8(113)
+        gray_g = numpy.uint8(118)
+        gray_b = numpy.uint8(130)
+        red = numpy.where(moving_mask, red, gray_r)
+        green = numpy.where(moving_mask, green, gray_g)
+        blue = numpy.where(moving_mask, blue, gray_b)
+        rgb_uint32 = ((red.astype(numpy.uint32) << 16) |
+                      (green.astype(numpy.uint32) << 8) |
+                      blue.astype(numpy.uint32))
+        rgb_float32 = rgb_uint32.view(numpy.float32)
+
+        viz_fields = [
+            PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
+            PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
+            PointField(name='z', offset=8, datatype=PointField.FLOAT32, count=1),
+            PointField(name='rgb', offset=12, datatype=PointField.FLOAT32, count=1)
+        ]
+        viz_cloud_data = numpy.column_stack([x_v, y_v, z_v, rgb_float32])
+        self.doppler_lidar_viz_publisher.publish(create_cloud(header, viz_fields, viz_cloud_data.tolist()))
