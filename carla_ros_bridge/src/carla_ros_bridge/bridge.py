@@ -14,6 +14,7 @@ Class that handle communication between CARLA and ROS
 import os
 # import pkg_resources
 from importlib.metadata import version as get_version
+import time
 try:
     import queue
 except ImportError:
@@ -136,6 +137,9 @@ class CarlaRosBridge(CompatibleNode):
         self._all_vehicle_control_commands_received = Event()
         self._expected_ego_vehicle_control_command_ids = []
         self._expected_ego_vehicle_control_command_ids_lock = Lock()
+        self.max_tick_rate = max(float(self.parameters.get("max_tick_rate", 0.0)), 0.0)
+        self._tick_period = 1.0 / self.max_tick_rate if self.max_tick_rate > 0.0 else 0.0
+        self._last_tick_wall_time = None
 
         if self.sync_mode:
             self.carla_run_state = CarlaControl.PLAY
@@ -261,6 +265,12 @@ class CarlaRosBridge(CompatibleNode):
         execution loop for synchronous mode
         """
         while not self.shutdown.is_set() and roscomp.ok():
+            if self._tick_period > 0.0 and self._last_tick_wall_time is not None:
+                elapsed = time.monotonic() - self._last_tick_wall_time
+                remaining = self._tick_period - elapsed
+                if remaining > 0.0:
+                    time.sleep(remaining)
+
             self.process_run_state()
 
             if self.parameters['synchronous_mode_wait_for_vehicle_control_command']:
@@ -283,6 +293,7 @@ class CarlaRosBridge(CompatibleNode):
                 frame))
             self._update(frame, world_snapshot.timestamp.elapsed_seconds)
             self.logdebug("Waiting for sensor data finished.")
+            self._last_tick_wall_time = time.monotonic()
 
             if self.parameters['synchronous_mode_wait_for_vehicle_control_command']:
                 # wait for all ego vehicles to send a vehicle control command
@@ -415,6 +426,7 @@ def main(args=None):
         'synchronous_mode_wait_for_vehicle_control_command', False)
     parameters['fixed_delta_seconds'] = carla_bridge.get_param('fixed_delta_seconds',
                                                                0.05)
+    parameters['max_tick_rate'] = carla_bridge.get_param('max_tick_rate', 0.0)
     parameters['register_all_sensors'] = carla_bridge.get_param('register_all_sensors', True)
     parameters['town'] = carla_bridge.get_param('town', 'Town01')
     role_name = carla_bridge.get_param('ego_vehicle_role_name', ["hero", "ego_vehicle", "hero1", "hero2", "hero3"])

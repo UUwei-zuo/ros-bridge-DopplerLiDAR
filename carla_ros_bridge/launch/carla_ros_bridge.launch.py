@@ -40,6 +40,11 @@ def generate_launch_description():
             description='Simulation time (delta seconds) between simulation steps'
         ),
         launch.actions.DeclareLaunchArgument(
+            name='max_tick_rate',
+            default_value='0.0',
+            description='Optional max world tick rate in Hz (0 disables cap)'
+        ),
+        launch.actions.DeclareLaunchArgument(
             name='town',
             default_value='Town01',
             description='Either use an available CARLA town (eg. "Town01") or an OpenDRIVE file (ending in .xodr)'
@@ -86,6 +91,9 @@ def generate_launch_description():
                 },
                 {
                     'fixed_delta_seconds': launch.substitutions.LaunchConfiguration('fixed_delta_seconds')
+                },
+                {
+                    'max_tick_rate': launch.substitutions.LaunchConfiguration('max_tick_rate')
                 },
                 {
                     'town': launch.substitutions.LaunchConfiguration('town')
